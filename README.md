@@ -41,19 +41,22 @@ Phục hồi về vùng an toàn không phát cảnh báo; giảm trở lại s�
 Pin và tín hiệu micro được theo dõi độc lập. Giá trị ngoài 0–100 gây
 `InvalidDeviceReadingException` trước khi dữ liệu bị thay đổi.
 
-### Vì sao thiết bị không gọi trực tiếp MaintenanceService?
+## Trả lời câu hỏi
 
-Thiết bị chỉ phát hiện và công bố sự cố. Subscriber quyết định ghi log,
-hiển thị hay tạo yêu cầu bảo trì. Nhờ vậy có thể thêm subscriber mà không
-sửa lớp thiết bị.
+### 1. Vì sao thiết bị không nên gọi trực tiếp MaintenanceService?
 
-### Khi nào tách event, khi nào dùng chung?
+Nhiệm vụ của thiết bị là theo dõi trạng thái của chính nó và phát thông báo khi có thay đổi hoặc sự cố. Việc tạo yêu cầu bảo trì thuộc trách nhiệm của `MaintenanceService`. Nếu gọi trực tiếp dịch vụ này, lớp thiết bị sẽ phụ thuộc vào cách xử lý bảo trì và có thể phải sửa khi cách xử lý thay đổi.
 
-Tách khi ý nghĩa hoặc dữ liệu khác nhau, như đổi trạng thái và cảnh báo.
-Dùng chung khi cùng ý nghĩa và cấu trúc dữ liệu, như cảnh báo pin và tín hiệu.
+Sử dụng event giúp tách hai trách nhiệm đó: thiết bị phát `AlertRaised`, còn `MaintenanceService` đăng ký nhận cảnh báo và chỉ tạo yêu cầu khi mức độ là `Critical`. Các thành phần khác cũng có thể đăng ký để ghi log, hiển thị thông báo hoặc gửi email mà không cần thay đổi mã của thiết bị.
 
-### Thành phần nào có quyền phát sinh event?
+### 2. Khi nào cần một event riêng, khi nào có thể dùng chung một event?
 
-`TeachingDevice` gọi `Invoke` trong các phương thức `On...` protected virtual.
-Lớp dẫn xuất phát qua các phương thức protected. Mã bên ngoài chỉ đăng ký
-và hủy đăng ký bằng `+=` và `-=`.
+Nên tạo event riêng khi điều cần thông báo có ý nghĩa khác nhau hoặc cần dữ liệu khác nhau. Trong bài này, `StatusChanged` thông báo việc đổi trạng thái nên cần trạng thái cũ và mới; `AlertRaised` thông báo sự cố nên cần nội dung và mức độ cảnh báo. Vì vậy, hai trường hợp được tách thành hai event.
+
+Có thể dùng chung event khi các thông báo cùng mục đích và biểu diễn được bằng cùng cấu trúc dữ liệu. Ví dụ, pin yếu ở máy chiếu và tín hiệu yếu ở micro đều dùng `AlertRaised` với `DeviceAlertEventArgs`. Subscriber phân biệt chúng qua mã thiết bị, nội dung và mức độ cảnh báo, nên không cần tạo event riêng cho từng loại thiết bị.
+
+### 3. Thành phần nào có quyền phát sinh event?
+
+Trong C#, chỉ lớp khai báo event mới được trực tiếp gọi `Invoke` cho event đó. Ở bài này, `TeachingDevice` khai báo `StatusChanged` và `AlertRaised`, đồng thời phát chúng trong các phương thức `OnStatusChanged` và `OnAlertRaised`.
+
+Các lớp dẫn xuất như `ProjectorRemote`, `AirConditionerRemote` và `WirelessMicrophone` có thể yêu cầu phát cảnh báo thông qua phương thức `protected` như `RaiseAlert` hoặc `OnAlertRaised`, nhưng không trực tiếp gọi `Invoke` trên event của lớp cha. Các đối tượng bên ngoài chỉ được đăng ký bằng `+=` và hủy đăng ký bằng `-=`, không được tự phát event.
